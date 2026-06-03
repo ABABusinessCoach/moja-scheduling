@@ -163,12 +163,39 @@ export function ClientForm({ client, onSave, onCancel }: ClientFormProps) {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+
+    // Client-side validation
+    const trimmedFirst = firstName.trim();
+    const trimmedLast = lastName.trim();
+    if (!trimmedFirst) { setError('First name is required.'); return; }
+    if (!trimmedLast) { setError('Last name is required.'); return; }
+    if (trimmedFirst.length > 100) { setError('First name must be 100 characters or fewer.'); return; }
+    if (trimmedLast.length > 100) { setError('Last name must be 100 characters or fewer.'); return; }
+
+    if (authorizedHours !== '') {
+      const parsedHours = parseFloat(authorizedHours);
+      if (isNaN(parsedHours) || parsedHours < 0 || parsedHours > 80) {
+        setError('Authorized hours must be between 0 and 80.');
+        return;
+      }
+    }
+
+    if (useRampUp) {
+      for (const row of rampUp) {
+        if (row.target_hours < 0.5 || row.target_hours > 80) {
+          setError('Ramp-up target hours must be between 0.5 and 80.');
+          return;
+        }
+      }
+    }
+
+    const trimmedNotes = notes.trim().slice(0, 500);
+
     setSaving(true);
 
     try {
       const enabledDays = dayWindows.filter((w) => w.enabled);
 
-      // Derive shift_type from window pattern for backward compat
       const derivedShift: ShiftType = (() => {
         if (enabledDays.length === 0) return 'FULL';
         const allFull = enabledDays.every((w) => w.start === '08:00' && w.end === '14:30');
@@ -181,13 +208,13 @@ export function ClientForm({ client, onSave, onCancel }: ClientFormProps) {
       })();
 
       const payload = {
-        first_name: firstName,
-        last_name: lastName,
+        first_name: trimmedFirst,
+        last_name: trimmedLast,
         shift_type: derivedShift,
         custom_end_time: derivedShift === 'CUSTOM' ? customEndTime || null : null,
         no_male_therapists: noMale,
         is_active: isActive,
-        notes,
+        notes: trimmedNotes,
         authorized_hours_per_week: authorizedHours ? parseFloat(authorizedHours) : null,
         required_skills: requiredSkills,
         ramp_up_schedule: useRampUp && rampUp.length ? rampUp : null,
@@ -237,7 +264,14 @@ export function ClientForm({ client, onSave, onCancel }: ClientFormProps) {
 
       onSave();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('duplicate') || msg.includes('unique')) {
+        setError('A client with that name already exists.');
+      } else if (msg) {
+        setError('Failed to save. Please check your entries and try again.');
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -558,7 +592,7 @@ export function ClientForm({ client, onSave, onCancel }: ClientFormProps) {
             </div>
             <div>
               <label className="form-label">Notes</label>
-              <input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+              <input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" maxLength={500} />
             </div>
           </div>
 

@@ -70,6 +70,18 @@ export function DailyView({
   onToggleNote,
 }: DailyViewProps) {
   const [editingCell, setEditingCell] = React.useState<string | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!editingCell) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setEditingCell(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [editingCell]);
 
   const noteByAssignment = React.useMemo(() => {
     const map = new Map<string, SessionNote>();
@@ -96,7 +108,7 @@ export function DailyView({
   }
 
   return (
-    <div>
+    <div ref={containerRef}>
       <DayPicker day={day} onChange={onDayChange} />
 
       <div className="overflow-x-auto mt-4">

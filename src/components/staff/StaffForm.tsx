@@ -134,6 +134,25 @@ export function StaffForm({ staff, onSave, onCancel }: StaffFormProps) {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+
+    // Client-side validation
+    const trimmedName = name.trim();
+    if (!trimmedName) { setError('Name is required.'); return; }
+    if (trimmedName.length > 100) { setError('Name must be 100 characters or fewer.'); return; }
+
+    const parsedGoal = parseFloat(goalHours);
+    if (isNaN(parsedGoal) || parsedGoal < 1 || parsedGoal > 60) {
+      setError('Weekly hour goal must be between 1 and 60.');
+      return;
+    }
+
+    const parsedSupReq = parseFloat(supervisionRequired) || 0;
+    const parsedSupWeek = parseFloat(supervisionThisWeek) || 0;
+    if (parsedSupReq < 0 || parsedSupReq > 40) { setError('Supervision required must be between 0 and 40.'); return; }
+    if (parsedSupWeek < 0 || parsedSupWeek > 40) { setError('Supervision this week must be between 0 and 40.'); return; }
+
+    const trimmedNotes = notes.trim().slice(0, 500);
+
     setSaving(true);
 
     try {
@@ -141,23 +160,23 @@ export function StaffForm({ staff, onSave, onCancel }: StaffFormProps) {
 
       if (isEdit && staff) {
         const { error } = await supabase.from('staff').update({
-          name, employment_type: employment,
-          weekly_hour_goal: parseFloat(goalHours),
-          priority_tier: tier, gender, is_active: isActive, notes,
+          name: trimmedName, employment_type: employment,
+          weekly_hour_goal: parsedGoal,
+          priority_tier: tier, gender, is_active: isActive, notes: trimmedNotes,
           skills,
-          supervision_hours_required: parseFloat(supervisionRequired) || 0,
-          supervision_hours_this_week: parseFloat(supervisionThisWeek) || 0,
+          supervision_hours_required: parsedSupReq,
+          supervision_hours_this_week: parsedSupWeek,
         }).eq('id', staff.id);
         if (error) throw error;
         staffId = staff.id;
       } else {
         const { data, error } = await supabase.from('staff').insert({
-          name, employment_type: employment,
-          weekly_hour_goal: parseFloat(goalHours),
-          priority_tier: tier, gender, is_active: isActive, notes,
+          name: trimmedName, employment_type: employment,
+          weekly_hour_goal: parsedGoal,
+          priority_tier: tier, gender, is_active: isActive, notes: trimmedNotes,
           skills,
-          supervision_hours_required: parseFloat(supervisionRequired) || 0,
-          supervision_hours_this_week: parseFloat(supervisionThisWeek) || 0,
+          supervision_hours_required: parsedSupReq,
+          supervision_hours_this_week: parsedSupWeek,
         }).select().single();
         if (error) throw error;
         staffId = data.id;
@@ -188,7 +207,14 @@ export function StaffForm({ staff, onSave, onCancel }: StaffFormProps) {
 
       onSave();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('duplicate') || msg.includes('unique')) {
+        setError('A staff member with that name already exists.');
+      } else if (msg) {
+        setError('Failed to save. Please check your entries and try again.');
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -455,7 +481,7 @@ export function StaffForm({ staff, onSave, onCancel }: StaffFormProps) {
             </div>
             <div>
               <label className="form-label">Notes</label>
-              <input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+              <input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" maxLength={500} />
             </div>
           </div>
 

@@ -217,10 +217,10 @@ export function generateWeeklySchedule(
         if (projectedHours > chosen.weekly_hour_goal) {
           violations.push(`${chosen.name} will exceed weekly goal of ${chosen.weekly_hour_goal}h (projected ${projectedHours.toFixed(1)}h)`);
         }
-        if (authCap !== null && authCap !== undefined) {
+        if (effectiveCap !== null && effectiveCap !== undefined) {
           const clientProjected = getClientHoursInBatch(client.id, assignments) + sessionHours;
-          if (clientProjected > authCap) {
-            violations.push(`Client exceeds authorized ${authCap}h/week (projected ${clientProjected.toFixed(1)}h)`);
+          if (clientProjected > effectiveCap) {
+            violations.push(`Client exceeds cap of ${effectiveCap}h/week (projected ${clientProjected.toFixed(1)}h)`);
           }
         }
 
@@ -370,7 +370,7 @@ export function getCancellationRecommendation(
 
   const clientNames = affected
     .map((a) => {
-      const c = a.client as Client;
+      const c = a.client as Client | undefined;
       const timeLabel = a.time_start && a.time_end
         ? ` ${a.time_start.slice(0, 5)}–${a.time_end.slice(0, 5)}`
         : ` (${a.shift})`;

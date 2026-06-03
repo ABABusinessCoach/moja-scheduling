@@ -66,6 +66,18 @@ export function TimelineGrid({
   onToggleNote,
 }: TimelineGridProps) {
   const [editingCell, setEditingCell] = React.useState<string | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!editingCell) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setEditingCell(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [editingCell]);
 
   const noteByAssignment = React.useMemo(() => {
     const map = new Map<string, SessionNote>();
@@ -89,7 +101,7 @@ export function TimelineGrid({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" ref={containerRef}>
       <div style={{ minWidth: `${140 + DAYS.length * 160}px` }}>
         {/* Header */}
         <div

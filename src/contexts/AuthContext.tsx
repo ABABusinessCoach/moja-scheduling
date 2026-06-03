@@ -17,13 +17,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Seed initial state in case onAuthStateChange fires before getSession resolves
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -31,12 +33,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    if (!error) return { error: null };
+    if (error.status === 400 || error.status === 422) return { error: 'Invalid email or password.' };
+    return { error: 'Unable to sign in. Please try again.' };
   }
 
   async function signUp(email: string, password: string) {
     const { error } = await supabase.auth.signUp({ email, password });
-    return { error: error?.message ?? null };
+    if (!error) return { error: null };
+    if (error.message?.toLowerCase().includes('already registered')) return { error: 'An account with that email already exists.' };
+    if (error.status === 422) return { error: 'Password must be at least 6 characters.' };
+    return { error: 'Unable to create account. Please try again.' };
   }
 
   async function signOut() {

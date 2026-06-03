@@ -21,6 +21,7 @@ import { TimelineGrid } from '../components/schedule/TimelineGrid';
 import { DailyView } from '../components/schedule/DailyView';
 import { SupervisionTracker } from '../components/schedule/SupervisionTracker';
 import { ClientHourTracker } from '../components/schedule/ClientHourTracker';
+import { useToast } from '../lib/toast';
 import {
   ChevronLeft,
   ChevronRight,
@@ -52,6 +53,7 @@ export function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [alertsDismissed, setAlertsDismissed] = useState(false);
+  const showToast = useToast();
 
   useEffect(() => { loadBaseData(); }, []);
 
@@ -81,8 +83,18 @@ export function SchedulePage() {
         .order('first_name'),
       supabase.from('staff_client_restrictions').select('*'),
     ]);
-    setStaff(staffRes.data ?? []);
-    setClients(clientRes.data ?? []);
+    // Supabase returns nested joins keyed by table name (staff_availability, client_availability,
+    // client_attendance). Map them to the interface property names the scheduler expects.
+    setStaff(
+      (staffRes.data ?? []).map((s: any) => ({ ...s, availability: s.staff_availability }))
+    );
+    setClients(
+      (clientRes.data ?? []).map((c: any) => ({
+        ...c,
+        availability: c.client_availability,
+        attendance: c.client_attendance,
+      }))
+    );
     setAllRestrictions(restrictRes.data ?? []);
   }
 
@@ -101,7 +113,15 @@ export function SchedulePage() {
         .from('schedule_assignments')
         .select('*, staff(*,staff_availability(*)), client:clients(*,client_attendance(*),client_availability(*))')
         .eq('schedule_id', sched.id);
-      const loaded = assignData ?? [];
+      const loaded = (assignData ?? []).map((a: any) => ({
+        ...a,
+        staff: a.staff
+          ? { ...a.staff, availability: a.staff.staff_availability }
+          : undefined,
+        client: a.client
+          ? { ...a.client, availability: a.client.client_availability, attendance: a.client.client_attendance }
+          : undefined,
+      }));
       setAssignments(loaded);
       await loadSessionNotes(loaded.map((a: ScheduleAssignment) => a.id));
     } else {
@@ -137,6 +157,10 @@ export function SchedulePage() {
   }
 
   async function generateSchedule() {
+    if (staff.length === 0 || clients.length === 0) {
+      showToast('Add staff and clients before generating a schedule.', 'error');
+      return;
+    }
     if (schedule?.status === 'published') {
       const ok = window.confirm(
         'This schedule is already published. Regenerating will delete all current assignments and create a new draft. Continue?'
@@ -147,30 +171,37 @@ export function SchedulePage() {
     const weekStr = format(currentMonday, 'yyyy-MM-dd');
     let scheduleId: string;
 
-    const { data: existing } = await supabase
-      .from('schedules')
-      .select('id')
-      .eq('week_start_date', weekStr)
-      .maybeSingle();
-
-    if (existing) {
-      scheduleId = existing.id;
-      await supabase.from('schedule_assignments').delete().eq('schedule_id', scheduleId);
-    } else {
-      const { data: newSched } = await supabase
+    try {
+      const { data: existing } = await supabase
         .from('schedules')
-        .insert({ week_start_date: weekStr, status: 'draft' })
-        .select()
-        .single();
-      scheduleId = newSched!.id;
-    }
+        .select('id')
+        .eq('week_start_date', weekStr)
+        .maybeSingle();
 
-    const generated = generateWeeklySchedule(scheduleId, staff, clients, allRestrictions);
-    if (generated.length > 0) {
-      await supabase.from('schedule_assignments').insert(generated);
+      if (existing) {
+        scheduleId = existing.id;
+        await supabase.from('schedule_assignments').delete().eq('schedule_id', scheduleId);
+      } else {
+        const { data: newSched, error } = await supabase
+          .from('schedules')
+          .insert({ week_start_date: weekStr, status: 'draft' })
+          .select()
+          .single();
+        if (error || !newSched) throw new Error(error?.message ?? 'Failed to create schedule');
+        scheduleId = newSched.id;
+      }
+
+      const generated = generateWeeklySchedule(scheduleId, staff, clients, allRestrictions);
+      if (generated.length > 0) {
+        await supabase.from('schedule_assignments').insert(generated);
+      }
+      await loadSchedule();
+      showToast('Schedule generated.');
+    } catch (err) {
+      showToast('Failed to generate schedule. Please try again.', 'error');
+    } finally {
+      setGenerating(false);
     }
-    await loadSchedule();
-    setGenerating(false);
   }
 
   async function handleUpdateAssignment(assignmentId: string, staffId: string | null) {
@@ -183,8 +214,13 @@ export function SchedulePage() {
 
   async function publishSchedule() {
     if (!schedule) return;
-    await supabase.from('schedules').update({ status: 'published' }).eq('id', schedule.id);
-    await loadSchedule();
+    const { error } = await supabase.from('schedules').update({ status: 'published' }).eq('id', schedule.id);
+    if (error) {
+      showToast('Failed to publish schedule.', 'error');
+    } else {
+      showToast('Schedule published.');
+      await loadSchedule();
+    }
   }
 
   const violationCount = assignments.filter((a) => a.violation_reason).length;

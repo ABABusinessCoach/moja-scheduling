@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import type {
+import React, { useState } from 'react';import type {
   ScheduleAssignment,
   Staff,
   Client,
@@ -28,6 +27,18 @@ export function WeeklyGrid({
   weekLabel,
 }: WeeklyGridProps) {
   const [editingCell, setEditingCell] = useState<string | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!editingCell) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setEditingCell(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [editingCell]);
 
   function getAssignment(day: DayOfWeek, shift: AssignmentShift, clientId: string) {
     return assignments.find(
@@ -93,7 +104,7 @@ export function WeeklyGrid({
   const activeClients = clients.filter((c) => c.is_active);
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" ref={containerRef}>
       <div className="min-w-[800px]">
         {/* Header */}
         <div className="grid bg-slate-50 rounded-t-xl border border-slate-200 border-b-0" style={{ gridTemplateColumns: '140px repeat(5, 1fr)' }}>

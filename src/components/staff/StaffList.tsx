@@ -4,6 +4,7 @@ import type { Staff, StaffAvailability, StaffClientRestriction, DayOfWeek } from
 import { DAY_SHORT } from '../../lib/types';
 import { Plus, Pencil, Trash2, User } from 'lucide-react';
 import { StaffForm } from './StaffForm';
+import { useToast } from '../../lib/toast';
 
 const TIER_LABELS: Record<number, { label: string; color: string }> = {
   1: { label: 'Tier 1', color: 'bg-amber-100 text-amber-700' },
@@ -17,24 +18,34 @@ export function StaffList() {
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<Staff | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const showToast = useToast();
 
   useEffect(() => { loadStaff(); }, []);
 
   async function loadStaff() {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('staff')
       .select(`*, staff_availability(*), staff_client_restrictions(*, clients(first_name, last_name))`)
       .order('priority_tier')
       .order('name');
+    if (error) showToast('Failed to load staff.', 'error');
     setStaff(data ?? []);
     setLoading(false);
   }
 
   async function deleteStaff(id: string) {
-    await supabase.from('staff').delete().eq('id', id);
+    setDeleting(true);
+    const { error } = await supabase.from('staff').delete().eq('id', id);
+    setDeleting(false);
     setConfirmDelete(null);
-    loadStaff();
+    if (error) {
+      showToast('Failed to remove staff member.', 'error');
+    } else {
+      showToast('Staff member removed.');
+      loadStaff();
+    }
   }
 
   function getAvailSummary(avail: StaffAvailability[]) {
@@ -220,7 +231,7 @@ export function StaffList() {
             <p className="text-slate-500 text-sm mb-5">This will also remove their availability and any restrictions.</p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-slate-700 text-sm font-medium hover:bg-slate-50">Cancel</button>
-              <button onClick={() => deleteStaff(confirmDelete)} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium">Remove</button>
+              <button onClick={() => deleteStaff(confirmDelete)} disabled={deleting} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium disabled:opacity-60">{deleting ? 'Removing…' : 'Remove'}</button>
             </div>
           </div>
         </div>
@@ -229,7 +240,11 @@ export function StaffList() {
       {showForm && (
         <StaffForm
           staff={editTarget}
-          onSave={() => { setShowForm(false); loadStaff(); }}
+          onSave={() => {
+            setShowForm(false);
+            showToast(editTarget ? 'Staff member updated.' : 'Staff member added.');
+            loadStaff();
+          }}
           onCancel={() => setShowForm(false)}
         />
       )}

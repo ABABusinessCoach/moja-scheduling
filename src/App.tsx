@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ToastProvider } from './lib/toast';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { SchedulePage } from './pages/SchedulePage';
@@ -39,10 +40,51 @@ function AppInner() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#f0f4f8' }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: '#f5f8fa' }}>
       <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-7 max-w-[1400px] mx-auto">
+      <main className="flex-1 overflow-y-auto relative">
+        {/* Brand accent blobs — per brand guide: irregular circles at 35% transparency */}
+        <div
+          className="fixed pointer-events-none"
+          style={{
+            top: '-80px',
+            right: '-80px',
+            width: '380px',
+            height: '380px',
+            borderRadius: '60% 40% 55% 45% / 45% 55% 45% 55%',
+            background: '#6dccc2',
+            opacity: 0.35,
+            zIndex: 0,
+          }}
+        />
+        <div
+          className="fixed pointer-events-none"
+          style={{
+            bottom: '-60px',
+            left: '180px',
+            width: '280px',
+            height: '300px',
+            borderRadius: '45% 55% 40% 60% / 55% 40% 60% 45%',
+            background: '#df76b6',
+            opacity: 0.28,
+            zIndex: 0,
+          }}
+        />
+        <div
+          className="fixed pointer-events-none"
+          style={{
+            bottom: '-40px',
+            right: '60px',
+            width: '300px',
+            height: '320px',
+            borderRadius: '50% 50% 45% 55% / 40% 60% 40% 60%',
+            background: '#efd35c',
+            opacity: 0.32,
+            zIndex: 0,
+          }}
+        />
+
+        <div className="relative z-10 p-7 max-w-[1400px] mx-auto">
           {renderPage()}
         </div>
       </main>
@@ -53,7 +95,9 @@ function AppInner() {
 function App() {
   return (
     <AuthProvider>
-      <AppInner />
+      <ToastProvider>
+        <AppInner />
+      </ToastProvider>
     </AuthProvider>
   );
 }

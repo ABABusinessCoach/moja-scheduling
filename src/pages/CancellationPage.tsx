@@ -13,6 +13,7 @@ import { DAY_NAMES, SHIFT_TIMES } from '../lib/types';
 import { getCancellationRecommendation } from '../lib/scheduler';
 import { getMonday, format, formatWeekRange } from '../lib/dateUtils';
 import { AlertTriangle, CheckCircle2, Plus, X } from 'lucide-react';
+import { useToast } from '../lib/toast';
 
 const DAYS: DayOfWeek[] = [1, 2, 3, 4, 5];
 
@@ -25,6 +26,8 @@ export function CancellationPage() {
   const [cancellations, setCancellations] = useState<Cancellation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const showToast = useToast();
 
   // Form state
   const [cancelType, setCancelType] = useState<'client' | 'staff'>('client');
@@ -77,6 +80,9 @@ export function CancellationPage() {
   async function handleSubmitCancellation(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedScheduleId || !cancelEntityId) return;
+
+    const trimmedReason = cancelReason.trim().slice(0, 200);
+
     setSubmitting(true);
 
     const typedAssignments = assignments as ScheduleAssignment[];
@@ -96,7 +102,7 @@ export function CancellationPage() {
       client_id: cancelType === 'client' ? cancelEntityId : null,
       day_of_week: cancelDay,
       shift: cancelShift,
-      reason: cancelReason,
+      reason: trimmedReason,
       recommendation,
       handled: false,
     });
@@ -112,7 +118,7 @@ export function CancellationPage() {
       for (const assignment of toRemove) {
         await supabase
           .from('schedule_assignments')
-          .update({ staff_id: null, violation_reason: `Staff cancelled (${cancelReason || 'no reason'})` })
+          .update({ staff_id: null, violation_reason: `Staff cancelled${trimmedReason ? ` (${trimmedReason})` : ''}` })
           .eq('id', assignment.id);
       }
     }
@@ -121,17 +127,23 @@ export function CancellationPage() {
     setCancelEntityId('');
     setCancelReason('');
     setShowForm(false);
+    showToast('Cancellation logged.');
     loadScheduleData(selectedScheduleId);
     setSubmitting(false);
   }
 
   async function markHandled(id: string) {
-    await supabase.from('cancellations').update({ handled: true }).eq('id', id);
+    const { error } = await supabase.from('cancellations').update({ handled: true }).eq('id', id);
+    if (error) showToast('Failed to update cancellation.', 'error');
+    else showToast('Marked as handled.');
     loadScheduleData(selectedScheduleId);
   }
 
   async function deleteCancellation(id: string) {
-    await supabase.from('cancellations').delete().eq('id', id);
+    const { error } = await supabase.from('cancellations').delete().eq('id', id);
+    setConfirmDeleteId(null);
+    if (error) showToast('Failed to delete cancellation.', 'error');
+    else showToast('Cancellation removed.');
     loadScheduleData(selectedScheduleId);
   }
 
@@ -242,7 +254,7 @@ export function CancellationPage() {
                       </button>
                     )}
                     <button
-                      onClick={() => deleteCancellation(c.id)}
+                      onClick={() => setConfirmDeleteId(c.id)}
                       className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
                     >
                       <X size={16} />
@@ -255,8 +267,21 @@ export function CancellationPage() {
         </div>
       )}
 
-      {/* Log cancellation modal */}
-      {showForm && (
+      {/* Confirm delete modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 className="font-semibold text-slate-900 mb-2">Delete cancellation?</h3>
+            <p className="text-slate-500 text-sm mb-5">This record will be permanently removed.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-slate-700 text-sm font-medium hover:bg-slate-50">Cancel</button>
+              <button onClick={() => deleteCancellation(confirmDeleteId)} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Log cancellation modal */}      {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
@@ -321,13 +346,17 @@ export function CancellationPage() {
               </div>
 
               <div>
-                <label className="form-label">Reason (optional)</label>
+                <label className="form-label">Reason <span className="font-normal text-slate-400">(optional, max 200 chars)</span></label>
                 <input
                   className="form-input"
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
                   placeholder="Illness, personal, etc."
+                  maxLength={200}
                 />
+                {cancelReason.length > 160 && (
+                  <p className="text-xs text-amber-600 mt-1">{200 - cancelReason.length} characters remaining</p>
+                )}
               </div>
 
               <div className="flex gap-3 pt-1">

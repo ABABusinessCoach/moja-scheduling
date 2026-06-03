@@ -50,8 +50,15 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       supabase.from('staff_client_restrictions').select('*'),
     ]);
 
-    const staffData: Staff[] = staffRes.data ?? [];
-    const clientData: Client[] = clientRes.data ?? [];
+    const staffData: Staff[] = (staffRes.data ?? []).map((s: any) => ({
+      ...s,
+      availability: s.staff_availability,
+    }));
+    const clientData: Client[] = (clientRes.data ?? []).map((c: any) => ({
+      ...c,
+      availability: c.client_availability,
+      attendance: c.client_attendance,
+    }));
     const restrictData: StaffClientRestriction[] = restrictRes.data ?? [];
 
     setStaff(staffData);

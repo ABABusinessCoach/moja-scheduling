@@ -4,6 +4,7 @@ import type { Client, ClientAvailability, DayOfWeek } from '../../lib/types';
 import { DAY_SHORT } from '../../lib/types';
 import { Plus, Pencil, Trash2, UserRound } from 'lucide-react';
 import { ClientForm } from './ClientForm';
+import { useToast } from '../../lib/toast';
 
 export function ClientList() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -11,23 +12,33 @@ export function ClientList() {
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<Client | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const showToast = useToast();
 
   useEffect(() => { loadClients(); }, []);
 
   async function loadClients() {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('clients')
       .select(`*, client_attendance(*), client_availability(*), staff_client_restrictions(*, staff(name))`)
       .order('first_name');
+    if (error) showToast('Failed to load clients.', 'error');
     setClients(data ?? []);
     setLoading(false);
   }
 
   async function deleteClient(id: string) {
-    await supabase.from('clients').delete().eq('id', id);
+    setDeleting(true);
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    setDeleting(false);
     setConfirmDelete(null);
-    loadClients();
+    if (error) {
+      showToast('Failed to remove client.', 'error');
+    } else {
+      showToast('Client removed.');
+      loadClients();
+    }
   }
 
   function getAvailSummary(avail: ClientAvailability[]) {
@@ -192,7 +203,7 @@ export function ClientList() {
             <p className="text-slate-500 text-sm mb-5">This will remove all their availability, attendance, and restriction records.</p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-slate-700 text-sm font-medium hover:bg-slate-50">Cancel</button>
-              <button onClick={() => deleteClient(confirmDelete)} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium">Remove</button>
+              <button onClick={() => deleteClient(confirmDelete)} disabled={deleting} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium disabled:opacity-60">{deleting ? 'Removing…' : 'Remove'}</button>
             </div>
           </div>
         </div>
@@ -201,7 +212,11 @@ export function ClientList() {
       {showForm && (
         <ClientForm
           client={editTarget}
-          onSave={() => { setShowForm(false); loadClients(); }}
+          onSave={() => {
+            setShowForm(false);
+            showToast(editTarget ? 'Client updated.' : 'Client added.');
+            loadClients();
+          }}
           onCancel={() => setShowForm(false)}
         />
       )}
