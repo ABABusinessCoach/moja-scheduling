@@ -22,13 +22,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    // Seed initial state in case onAuthStateChange fires before getSession resolves
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    // Safety net: if auth never resolves (network issue, bad env vars), stop spinning after 8s
+    const timeout = setTimeout(() => setLoading(false), 8000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   async function signIn(email: string, password: string) {
