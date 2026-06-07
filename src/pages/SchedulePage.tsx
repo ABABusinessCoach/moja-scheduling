@@ -22,6 +22,7 @@ import { DailyView } from '../components/schedule/DailyView';
 import { SupervisionTracker } from '../components/schedule/SupervisionTracker';
 import { ClientHourTracker } from '../components/schedule/ClientHourTracker';
 import { useToast } from '../lib/toast';
+import { ScheduleAssistant } from '../components/schedule/ScheduleAssistant';
 import {
   ChevronLeft,
   ChevronRight,
@@ -181,6 +182,7 @@ export function SchedulePage() {
       if (existing) {
         scheduleId = existing.id;
         await supabase.from('schedule_assignments').delete().eq('schedule_id', scheduleId);
+        await supabase.from('schedules').update({ status: 'draft' }).eq('id', scheduleId);
       } else {
         const { data: newSched, error } = await supabase
           .from('schedules')
@@ -208,6 +210,18 @@ export function SchedulePage() {
     await supabase
       .from('schedule_assignments')
       .update({ staff_id: staffId, is_manual_override: true, violation_reason: null })
+      .eq('id', assignmentId);
+    await loadSchedule();
+  }
+
+  async function handleMoveAssignment(
+    assignmentId: string,
+    newDay: DayOfWeek,
+    newShift: 'AM' | 'PM'
+  ) {
+    await supabase
+      .from('schedule_assignments')
+      .update({ day_of_week: newDay, shift: newShift, is_manual_override: true, violation_reason: null })
       .eq('id', assignmentId);
     await loadSchedule();
   }
@@ -244,6 +258,7 @@ export function SchedulePage() {
     clients,
     sessionNotes,
     onUpdateAssignment: handleUpdateAssignment,
+    onMoveAssignment: handleMoveAssignment,
     onToggleNote: handleToggleNote,
   };
 
@@ -360,6 +375,7 @@ export function SchedulePage() {
             staff={staff}
             clients={clients}
             onUpdateAssignment={handleUpdateAssignment}
+            onMoveAssignment={handleMoveAssignment}
             weekLabel={formatWeekRange(currentMonday)}
           />
         ) : viewMode === 'staff' ? (
@@ -425,6 +441,16 @@ export function SchedulePage() {
           </div>
         </div>
       </div>
+
+      {schedule && (
+        <ScheduleAssistant
+          assignments={assignments}
+          staff={staff}
+          clients={clients}
+          weekLabel={formatWeekRange(currentMonday)}
+          onUpdateAssignment={handleUpdateAssignment}
+        />
+      )}
     </div>
   );
 }
